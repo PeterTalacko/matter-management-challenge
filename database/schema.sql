@@ -165,3 +165,25 @@ CREATE INDEX idx_ticket_field_value_number ON ticketing_ticket_field_value(numbe
 CREATE INDEX idx_ticket_field_value_date ON ticketing_ticket_field_value(date_value);
 CREATE INDEX idx_ticketing_ticket_created_at ON ticketing_ticket(created_at);
 
+-- Potential choice for more efficient fetches
+-- Downside is if the system is expected to receive writes often
+CREATE MATERIALIZED VIEW mv_tickets AS
+SELECT
+  tt.id,
+  tt.board_id,
+  tt.created_at,
+  tt.updated_at,
+  MAX(CASE WHEN f.name = 'subject' THEN fv.text_value END) AS subject,
+  MAX(CASE WHEN f.name = 'Description' THEN fv.text_value END) AS description,
+  MAX(CASE WHEN f.name = 'Case Number' THEN fv.number_value END) AS case_number,
+  MAX(CASE WHEN f.name = 'Assigned To' THEN fv.user_value END) AS assigned_to,
+  MAX(CASE WHEN f.name = 'Contract Value' THEN fv.currency_value ->> 'amount' END) AS contract_value_amount,
+  MAX(CASE WHEN f.name = 'Contract Value' THEN fv.currency_value ->> 'currency' END) AS contract_value_currency,
+  bool_or(CASE WHEN f.name = 'Urgent' THEN fv.boolean_value END) AS urgent,
+  MAX(CASE WHEN f.name = 'Due Date' THEN fv.date_value END) AS due_date,
+  MAX(CASE WHEN f.name = 'Priority' THEN fv.select_reference_value_uuid::text END)::uuid AS priority,
+  MAX(CASE WHEN f.name = 'Status' THEN fv.status_reference_value_uuid::text END)::uuid AS status
+FROM ticketing_ticket tt
+LEFT JOIN ticketing_ticket_field_value fv ON fv.ticket_id = tt.id
+LEFT JOIN ticketing_fields f ON f.id = fv.ticket_field_id
+GROUP BY tt.id;

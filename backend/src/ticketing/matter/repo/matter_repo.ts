@@ -1,31 +1,39 @@
-import pool from '../../../db/pool.js';
-import { Matter, MatterListParams, FieldValue, UserValue, CurrencyValue, StatusValue } from '../../types.js';
-import logger from '../../../utils/logger.js';
 import { PoolClient } from 'pg';
+import pool from '../../../db/pool.js';
+import logger from '../../../utils/logger.js';
+import {
+  CurrencyValue,
+  FieldValue,
+  Matter,
+  MatterListParams,
+  StatusValue,
+  UserValue,
+} from '../../types.js';
 
 export class MatterRepo {
   /**
    * Get paginated list of matters with search and sorting
-   * 
+   *
    * TODO: Implement search functionality
    * - Search across text, number, and other field types
    * - Use PostgreSQL pg_trgm extension for fuzzy matching
    * - Consider performance with proper indexing
    * - Support searching cycle times and SLA statuses
-   * 
+   *
    * Search Requirements:
    * - Text fields: Use ILIKE with pg_trgm indexes
    * - Number fields: Convert to text for search
    * - Status fields: Search by label
    * - User fields: Search by name
    * - Consider debouncing on frontend (already implemented)
-   * 
+   *
    * Performance Considerations for 10× Load:
    * - Add GIN indexes on searchable columns
    * - Consider Elasticsearch for advanced search at scale
    * - Implement query result caching
    * - Use connection pooling effectively
    */
+
   async getMatters(params: MatterListParams) {
     const { page = 1, limit = 25, sortBy = 'created_at', sortOrder = 'desc' } = params;
     const offset = (page - 1) * limit;
@@ -54,7 +62,7 @@ export class MatterRepo {
         LEFT JOIN ticketing_ticket_field_value ttfv ON tt.id = ttfv.ticket_id
         WHERE 1=1 ${searchCondition}
       `;
-      
+
       const countResult = await client.query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total);
 
@@ -67,7 +75,7 @@ export class MatterRepo {
         ORDER BY ${orderByClause}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
-      
+
       queryParams.push(limit, offset);
       const mattersResult = await client.query(mattersQuery, queryParams);
 
@@ -76,11 +84,13 @@ export class MatterRepo {
 
       for (const matterRow of mattersResult.rows) {
         const fields = await this.getMatterFields(client, matterRow.id);
-        
+        const history = await this.getMatterCycleHistory(client, matterRow.id);
+
         matters.push({
           id: matterRow.id,
           boardId: matterRow.board_id,
           fields,
+          history,
           createdAt: matterRow.created_at,
           updatedAt: matterRow.updated_at,
         });
@@ -112,11 +122,13 @@ export class MatterRepo {
 
       const matterRow = matterResult.rows[0];
       const fields = await this.getMatterFields(client, matterId);
+      const history = await this.getMatterCycleHistory(client, matterId);
 
       return {
         id: matterRow.id,
         boardId: matterRow.board_id,
         fields,
+        history,
         createdAt: matterRow.created_at,
         updatedAt: matterRow.updated_at,
       };
@@ -128,7 +140,10 @@ export class MatterRepo {
   /**
    * Get all field values for a matter
    */
-  private async getMatterFields(client: PoolClient, ticketId: string): Promise<Record<string, FieldValue>> {
+  private async getMatterFields(
+    client: PoolClient,
+    ticketId: string,
+  ): Promise<Record<string, FieldValue>> {
     const fieldsResult = await client.query(
       `SELECT 
         ttfv.id,
@@ -167,7 +182,8 @@ export class MatterRepo {
     const fields: Record<string, FieldValue> = {};
 
     for (const row of fieldsResult.rows) {
-      let value: string | number | boolean | Date | CurrencyValue | UserValue | StatusValue | null = null;
+      let value: string | number | boolean | Date | CurrencyValue | UserValue | StatusValue | null =
+        null;
       let displayValue: string | undefined = undefined;
 
       switch (row.field_type) {
@@ -285,7 +301,7 @@ export class MatterRepo {
         case 'status': {
           columnName = 'status_reference_value_uuid';
           columnValue = value as string;
-          
+
           // Track status change in cycle time history
           const currentStatusResult = await client.query(
             `SELECT status_reference_value_uuid 
@@ -293,10 +309,10 @@ export class MatterRepo {
              WHERE ticket_id = $1 AND ticket_field_id = $2`,
             [matterId, fieldId],
           );
-          
+
           if (currentStatusResult.rows.length > 0) {
             const fromStatusId = currentStatusResult.rows[0].status_reference_value_uuid;
-            
+
             await client.query(
               `INSERT INTO ticketing_cycle_time_histories 
                (ticket_id, status_field_id, from_status_id, to_status_id, transitioned_at)
@@ -321,10 +337,9 @@ export class MatterRepo {
       );
 
       // Update matter's updated_at
-      await client.query(
-        `UPDATE ticketing_ticket SET updated_at = NOW() WHERE id = $1`,
-        [matterId],
-      );
+      await client.query(`UPDATE ticketing_ticket SET updated_at = NOW() WHERE id = $1`, [
+        matterId,
+      ]);
 
       await client.query('COMMIT');
     } catch (error) {
@@ -335,7 +350,35 @@ export class MatterRepo {
       client.release();
     }
   }
+
+  /**
+   * Get all cycle history for a matter
+   */
+  private async getMatterCycleHistory(
+    client: PoolClient,
+    ticketId: string,
+  ): Promise<Matter['history']> {
+    const matterHistory = await client.query<{ id: string; label: string; transitioned_at: Date }>(
+      `SELECT
+        tfso.id,
+        tfso.label,
+        tcth.transitioned_at
+      FROM ticketing_cycle_time_histories tcth
+      LEFT JOIN ticketing_field_status_options tfso on tcth.to_status_id = tfso.id 
+      WHERE tcth.ticket_id = $1
+      ORDER BY transitioned_at ASC`,
+      [ticketId],
+    );
+    // console.log(matterHistory.rowCount);
+
+    return matterHistory.rows.map((row) => ({
+      status: {
+        statusId: row.id,
+        groupName: row.label,
+      },
+      transitionedAt: row.transitioned_at,
+    }));
+  }
 }
 
 export default MatterRepo;
-

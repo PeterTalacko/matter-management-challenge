@@ -2,8 +2,8 @@ export interface Matter {
   id: string;
   boardId: string;
   fields: Record<string, FieldValue>;
-  cycleTime?: CycleTime;
-  sla?: SLAStatus;
+  cycleTime: CycleTime;
+  sla: SLAStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,11 +30,27 @@ export interface FieldValue {
   fieldId: string;
   fieldName: string;
   fieldType: FieldType;
-  value: string | number | boolean | Date | CurrencyValue | UserValue | StatusValue | null;
+  value:
+    | string
+    | number
+    | boolean
+    | Date
+    | CurrencyValue
+    | UserValue
+    | StatusValue
+    | null;
   displayValue?: string;
 }
 
-export type FieldType = 'text' | 'number' | 'select' | 'date' | 'currency' | 'boolean' | 'status' | 'user';
+export type FieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "date"
+  | "currency"
+  | "boolean"
+  | "status"
+  | "user";
 
 export interface CycleTime {
   resolutionTimeMs: number | null;
@@ -44,7 +60,7 @@ export interface CycleTime {
   completedAt: string | null;
 }
 
-export type SLAStatus = 'In Progress' | 'Met' | 'Breached';
+export type SLAStatus = "In Progress" | "Met" | "Breached";
 
 export interface MatterListResponse {
   data: Matter[];
@@ -78,4 +94,3 @@ export interface StatusOption {
   groupName: string;
   sequence: number;
 }
-

@@ -2,6 +2,11 @@ export interface Matter {
   id: string;
   boardId: string;
   fields: Record<string, FieldValue>;
+  // TODO: Move type
+  history: {
+    status: StatusValue;
+    transitionedAt: Date;
+  }[];
   cycleTime?: CycleTime;
   sla?: SLAStatus;
   createdAt: string;
@@ -34,7 +39,15 @@ export interface StatusValue {
   groupName: string;
 }
 
-export type FieldType = 'text' | 'number' | 'select' | 'date' | 'currency' | 'boolean' | 'status' | 'user';
+export type FieldType =
+  | 'text'
+  | 'number'
+  | 'select'
+  | 'date'
+  | 'currency'
+  | 'boolean'
+  | 'status'
+  | 'user';
 
 export interface CycleTime {
   resolutionTimeMs: number | null;
@@ -102,4 +115,3 @@ export interface CycleTimeHistory {
   toStatusId: string;
   transitionedAt: Date;
 }
-
