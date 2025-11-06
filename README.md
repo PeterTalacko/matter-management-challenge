@@ -6,19 +6,22 @@ Welcome! We're excited to see your approach to building a production-ready syste
 
 You'll be enhancing a **Matter Management System** - a tool for legal teams to track cases and matters. We've provided a working foundation, and you'll implement the missing features.
 
-**Time Estimate**: 4-8 hours  
+**Time Estimate**: 4-8 hours
 
 ---
 
 ## 📖 Start Here
 
 ### Step 1: Read the Instructions
+
 👉 **[ASSESSMENT.md](./ASSESSMENT.md)** - Your main task list and requirements
 
 ### Step 2: Understand the Database
+
 👉 **[DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md)** - Complete schema docs (READ THIS before coding!)
 
 ### Step 3: Quick Setup
+
 👉 **[QUICKSTART.md](./QUICKSTART.md)** - Setup guide and troubleshooting
 
 ---
@@ -48,45 +51,56 @@ That's it! You now have a running application with 10,000 pre-seeded matters.
 We've intentionally left some features incomplete for you to implement:
 
 ### 1. ⏱️ Cycle Time & SLA Calculation
+
 Implement logic to track how long matters take to resolve and whether they meet our 8-hour SLA.
 
 **What you'll build**:
+
 - Calculate resolution time from "To Do" → "Done"
 - Determine SLA status (Met, Breached, In Progress)
 - Display with color-coded badges in the UI
 
 **Files to modify**:
+
 - `backend/src/ticketing/matter/service/cycle_time_service.ts`
 - `frontend/src/components/MatterTable.tsx`
 
 ### 2. 🔄 Column Sorting
+
 Add sorting functionality to ALL table columns (currently only date sorting works).
 
 **What you'll build**:
+
 - Sort by numbers, text, dates, statuses, users, currency, booleans
 - Handle NULL values appropriately
 - Work with the EAV database pattern
 
 **Files to modify**:
+
 - `backend/src/ticketing/matter/repo/matter_repo.ts`
 - `frontend/src/components/MatterTable.tsx`
 
 ### 3. 🔍 Search
+
 Implement search across all fields using PostgreSQL full-text search.
 
 **What you'll build**:
+
 - Search text, numbers, status labels, user names
 - Debounced search input (500ms)
 - Use pg_trgm for fuzzy matching
 
 **Files to modify**:
+
 - `backend/src/ticketing/matter/repo/matter_repo.ts`
 - `frontend/src/App.tsx` (add SearchBar component)
 
 ### 4. 🧪 Tests
+
 Write comprehensive tests for your implementations.
 
 **What you'll write**:
+
 - Unit tests for cycle time logic
 - Integration tests for API endpoints
 - Edge case tests (NULL values, empty data)
@@ -95,9 +109,11 @@ Write comprehensive tests for your implementations.
 **Directory**: `backend/src/ticketing/matter/service/__tests__/`
 
 ### 5. 📈 Scalability Documentation
+
 Document how your solution would handle 10× the current load (100,000 matters, 1,000+ concurrent users).
 
 **What to include**:
+
 - Database optimization strategies
 - Caching approaches
 - Query optimization
@@ -112,6 +128,7 @@ Document how your solution would handle 10× the current load (100,000 matters, 
 To save you time, we've provided a fully working foundation:
 
 ### Database (PostgreSQL)
+
 - ✅ 11 tables with complete schema
 - ✅ 10,000 pre-seeded matters with realistic data
 - ✅ 8 field types (text, number, select, date, currency, boolean, status, user)
@@ -120,6 +137,7 @@ To save you time, we've provided a fully working foundation:
 - ✅ pg_trgm extension enabled for search
 
 ### Backend (Node.js + TypeScript)
+
 - ✅ Express API with proper structure
 - ✅ Database connection pooling
 - ✅ Basic CRUD endpoints (list, get, update)
@@ -129,6 +147,7 @@ To save you time, we've provided a fully working foundation:
 - ✅ Vitest test configuration
 
 ### Frontend (React + TypeScript)
+
 - ✅ React 18 with TypeScript
 - ✅ Vite build tooling
 - ✅ TailwindCSS styling
@@ -137,6 +156,7 @@ To save you time, we've provided a fully working foundation:
 - ✅ Loading and error states
 
 ### Infrastructure
+
 - ✅ Docker Compose orchestration
 - ✅ Automatic database seeding
 - ✅ Health checks
@@ -175,30 +195,31 @@ We use an **Entity-Attribute-Value (EAV)** pattern for flexible field definition
 
 ### Key Tables (11 total)
 
-| Table | Purpose | Rows Seeded |
-|-------|---------|-------------|
-| `ticketing_ticket` | Matter records | 10,000 |
-| `ticketing_ticket_field_value` | Field values (EAV table) | ~90,000 |
-| `ticketing_fields` | Field definitions | 9 |
-| `ticketing_cycle_time_histories` | Status transitions | Variable |
-| `ticketing_field_status_groups` | Status groups (To Do, In Progress, Done) | 3 |
-| `users` | User assignments | 5 |
-| ... + 5 more tables | Options, currencies, etc. | Various |
+| Table                            | Purpose                                  | Rows Seeded |
+| -------------------------------- | ---------------------------------------- | ----------- |
+| `ticketing_ticket`               | Matter records                           | 10,000      |
+| `ticketing_ticket_field_value`   | Field values (EAV table)                 | ~90,000     |
+| `ticketing_fields`               | Field definitions                        | 9           |
+| `ticketing_cycle_time_histories` | Status transitions                       | Variable    |
+| `ticketing_field_status_groups`  | Status groups (To Do, In Progress, Done) | 3           |
+| `users`                          | User assignments                         | 5           |
+| ... + 5 more tables              | Options, currencies, etc.                | Various     |
 
 ### 8 Field Types
 
-| Type | Storage Column | Example |
-|------|----------------|---------|
-| `text` | `text_value` or `string_value` | Subject, Description |
-| `number` | `number_value` | Case Number |
-| `select` | `select_reference_value_uuid` | Priority |
-| `date` | `date_value` | Due Date |
-| `currency` | `currency_value` (JSONB) | Contract Value |
-| `boolean` | `boolean_value` | Urgent flag |
-| `status` | `status_reference_value_uuid` | Matter Status |
-| `user` | `user_value` | Assigned To |
+| Type       | Storage Column                 | Example              |
+| ---------- | ------------------------------ | -------------------- |
+| `text`     | `text_value` or `string_value` | Subject, Description |
+| `number`   | `number_value`                 | Case Number          |
+| `select`   | `select_reference_value_uuid`  | Priority             |
+| `date`     | `date_value`                   | Due Date             |
+| `currency` | `currency_value` (JSONB)       | Contract Value       |
+| `boolean`  | `boolean_value`                | Urgent flag          |
+| `status`   | `status_reference_value_uuid`  | Matter Status        |
+| `user`     | `user_value`                   | Assigned To          |
 
 **📖 Full Details**: See [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for:
+
 - Complete table schemas with column descriptions
 - EAV pattern explanation
 - Sample SQL queries for sorting and search
@@ -254,17 +275,20 @@ PATCH /api/v1/matters/:id
 ### What You'll Add
 
 **Sorting**:
+
 ```http
 GET /api/v1/matters?sortBy=case_number&sortOrder=asc
 GET /api/v1/matters?sortBy=status&sortOrder=desc
 ```
 
 **Search**:
+
 ```http
 GET /api/v1/matters?search=contract&page=1&limit=25
 ```
 
 **Cycle Time/SLA** (added to response):
+
 ```json
 {
   "data": [{
@@ -287,6 +311,7 @@ GET /api/v1/matters?search=contract&page=1&limit=25
 We've configured Vitest for you. You'll write the actual tests.
 
 **Run tests**:
+
 ```bash
 cd backend
 npm test
@@ -299,6 +324,7 @@ npm test -- --watch
 ```
 
 **What to test**:
+
 - ✅ Cycle time calculations (NULL handling, edge cases)
 - ✅ SLA determination logic
 - ✅ Sorting with different field types
@@ -315,17 +341,20 @@ npm test -- --watch
 **You may use AI tools** (GitHub Copilot, ChatGPT, Claude, etc.), but:
 
 ### ✅ We Expect
+
 - Honest disclosure of which tools you used
 - Explanation of what was AI-generated vs. human-written
 - Justification for using AI for specific parts
 - **Full accountability** for all submitted code
 
 ### ❌ Unacceptable
+
 - Blindly copying AI output without review
 - Submitting code you don't understand
 - Not testing AI-generated code
 
 ### Good Example Disclosure
+
 > "I used GitHub Copilot to generate the initial cycle time query structure, but I rewrote the NULL handling logic and added edge case tests manually. The duration formatting function was AI-assisted but I modified it to handle our specific requirements (in-progress matters, very large durations). I am confident in the correctness and can explain every line."
 
 ---
@@ -335,6 +364,7 @@ npm test -- --watch
 Before you submit, make sure:
 
 ### Implementation
+
 - [ ] Cycle time & SLA working correctly
 - [ ] Sorting works for ALL columns
 - [ ] Search works across all field types
@@ -342,6 +372,7 @@ Before you submit, make sure:
 - [ ] Edge cases handled (NULL, empty, missing data)
 
 ### Code Quality
+
 - [ ] No TypeScript errors (`npm run build` succeeds in both backend & frontend)
 - [ ] No linting errors (`npm run lint` passes)
 - [ ] Code follows existing patterns
@@ -349,6 +380,7 @@ Before you submit, make sure:
 - [ ] Error handling throughout
 
 ### Documentation
+
 - [ ] README.md updated with your approach
 - [ ] Scalability analysis included (specific, quantified)
 - [ ] AI tool usage disclosed (if applicable)
@@ -356,12 +388,14 @@ Before you submit, make sure:
 - [ ] Setup instructions verified
 
 ### Testing
+
 - [ ] Application runs with `docker compose up`
 - [ ] Tests pass with `npm test`
 - [ ] Edge cases tested
 - [ ] Integration tests included
 
 ### Performance
+
 - [ ] No N+1 query problems
 - [ ] Efficient SQL queries
 - [ ] Proper index usage
@@ -441,34 +475,40 @@ matter-management-mvp/
 We evaluate across these dimensions:
 
 ### 1. Code Quality (25%)
+
 - Clean, maintainable code
 - TypeScript best practices
 - Follows SOLID principles
 - Consistent patterns
 
 ### 2. Production Readiness (20%)
+
 - Comprehensive error handling
 - Input validation
 - Logging with context
 - Edge case handling
 
 ### 3. Security (15%)
+
 - SQL injection prevention
 - Input sanitization
 - Safe error messages
 
 ### 4. Testing (20%)
+
 - Unit and integration tests
 - Edge case coverage
 - Test quality and design
 
 ### 5. System Design (15%)
+
 - Query optimization
 - Scalability thinking
 - Caching strategy
 - Trade-off awareness
 
 ### 6. Documentation (5%)
+
 - Clear explanations
 - Decision justifications
 - Scalability analysis
@@ -510,3 +550,33 @@ We're interested in how you think through ambiguity. Make reasonable assumptions
 ---
 
 **Happy coding! 🚀**
+
+## Cycle Time
+
+I began by adding a query to fetch the history of a single ticket similar to how `getMatterFields` works. After fetching the history and sorting by sequence, it is relatively simple to calculate the SLA and cycle time. The flaw with this method is that sorting and filtering by the resolution time or SLA label is not possible to be done as part of the initial `mattersQuery`.
+
+## Materialised View
+
+I initially started by adding the required joins conditionally to the `mattersQuery`. Quickly the readability of the query diminished and several issues became apparent. The most obvious issue, as previously mentioned, was the cycle times and SLA labels couldn't be ordered or searched.
+
+One of my initial thoughts when investigating the DB schema was that pivoting the EAV schema into a MV would simplify the solution significantly and would make all read queries quite performant. Furthermore, it would make the `getMatterFields` function and query redundant, as the MV would have all the required fields and `getMatterFields` could be simplified into only handling any conversions to display values. The assumption I am making here is that given the front end is a static table, the ticket fields appear to be more stable than when the initial EAV pattern was implemented. Given that it's unlikely any column will be removed entirely, adding a new value type/field and a column to the `mv_tickets` should be relatively straight forward.
+
+Indices could be added to the materialised view to further improve the performance of the required queries, the main reason I have limited the indices on the MV is that it is not clear how often the MV needs to be refreshed. For example, if the MV was set up to refresh once a minute, less indices would make for faster refreshes. Given that there are only 10,000 rows in `mv_tickets`, Postgres can easily scan it in memory incredibly quickly. Another reason to hold of on adding too many indices is knowing our user habits, if the workflow of 90% of our users is to sort by and filter by a specific column, let's say sort by Due Date and filter by Assigned To, indices on those columns would be the most effective.
+
+Potential refresh strategies could be using `pg_cron` or a Node.js script.
+
+## Issues Found
+
+On page load the matters API call is made twice with the exact same parameters. It may be worthwhile finding the cause and fixing it.
+
+On page load the table is sorted by `created_at`. Once a user selects a column to sort by they are unable to sort by `created_at` again. There are several options to rectify this issue:
+
+1. Use a different default ordering that is a column in the table
+2. Add created at as a column to the table
+3. After selecting a column twice (ASC then DESC), have the order by removed from that column (worst option IMO)
+
+The `ticketing_field_status_options` has matching options to `ticketing_field_status_groups` making it unclear how to use them correctly. According to `DATABASE_SCHEMA.md` the options table should have sub statuses that are linked to the groups. It would be much clearer if the options table had rows matching that file.
+
+It's unclear what `Handle NULL values appropriately` means. Given that the field value table has nulls in all but one value column it could be referring to that. There's also a query in `DATABASE_SCHEMA.md` for getting tickets with no status transitions, however, there is no such ticket. I have assumed that the ticket is referring to nulls due to the EAV structure as there is no clear requirement on what to do will null field values and no examples. The null values in columns will appear last in ascending order and first in descending order. This could be changed to always appear last depending on requirements.
+
+I ended up leaving the resolution time searching empty as the requirements don't make much logical sense. Is the user searching for a formatted string e.g. 8h 20m or a date? An improved UX would include a slider (or similar component) that could filter out resolution times outside of the provided ranges. To achieve this there are multiple options with the MV and query I have set up. If the MV is being refreshed often, let's say every couple minutes, the MV could contain the resolution time of incomplete tickets. The small difference between the current time and when the MV was refreshed would be negligible and most users wouldn't be refreshing their list often enough for them to notice a minute wrong here or there. If the MV was not being refresh as often, let's say every half hour, we can compute the resolution time in the matter query and use that instead.

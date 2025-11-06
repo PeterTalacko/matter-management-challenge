@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import logger from '../../../utils/logger.js';
 import { MatterListResponse } from '../../types.js';
-import { getCache, setCache } from '../cache/';
+import { getCache, setCache } from '../cache/cache.js';
 import { MatterService } from '../service/matter_service.js';
 
 const querySchema = z.object({

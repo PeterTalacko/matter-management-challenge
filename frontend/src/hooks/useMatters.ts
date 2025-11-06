@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Matter, MatterListResponse } from '../types/matter';
+import { useCallback, useEffect, useState } from "react";
+import { Matter, MatterListResponse } from "../types/matter";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api/v1";
 
 interface UseMatterParams {
   page: number;
   limit: number;
   sortBy: string;
-  sortOrder: 'asc' | 'desc';
+  sortOrder: "asc" | "desc";
   search: string;
 }
 
@@ -32,7 +32,7 @@ export function useMatters(params: UseMatterParams) {
       });
 
       const response = await fetch(`${API_URL}/matters?${queryParams}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -42,12 +42,18 @@ export function useMatters(params: UseMatterParams) {
       setTotal(result.total);
       setTotalPages(result.totalPages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch matters');
-      console.error('Error fetching matters:', err);
+      setError(err instanceof Error ? err.message : "Failed to fetch matters");
+      console.error("Error fetching matters:", err);
     } finally {
       setLoading(false);
     }
-  }, [params.page, params.limit, params.sortBy, params.sortOrder, params.search]);
+  }, [
+    params.page,
+    params.limit,
+    params.sortBy,
+    params.sortOrder,
+    params.search,
+  ]);
 
   useEffect(() => {
     fetchMatters();
@@ -62,4 +68,3 @@ export function useMatters(params: UseMatterParams) {
     refetch: fetchMatters,
   };
 }
-
