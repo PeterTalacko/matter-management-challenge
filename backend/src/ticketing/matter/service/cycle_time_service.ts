@@ -34,49 +34,27 @@ export class CycleTimeService {
     this.slaThresholdMs = config.SLA_THRESHOLD_HOURS * 60 * 60 * 1000;
   }
 
-  async calculateCycleTimeAndSLA(
-    ticketId: string,
+  calculateCycleTimeAndSLA(
     currentStatusGroupName: string | null,
     history: Matter['history'],
-  ): Promise<{ cycleTime: CycleTime; sla: SLAStatus }> {
-    if (history.length === 0) {
-      // TODO: Is this an error or can tickets have no history?
-      throw new Error(`No history found for ticket: ${ticketId}`);
-    }
+  ): { cycleTime: CycleTime; sla: SLAStatus } {
+    const isInProgress = currentStatusGroupName !== 'Done';
+    const sla = isInProgress
+      ? 'In Progress'
+      : history.resolutionTimeMs > this.slaThresholdMs
+        ? 'Breached'
+        : 'Met';
 
-    const firstTransitionDate = history[0].transitionedAt;
-
-    if (currentStatusGroupName === 'Done') {
-      const lastTransitionDate = history[history.length - 1].transitionedAt;
-      const resolutionTimeMs = lastTransitionDate.getTime() - firstTransitionDate.getTime();
-      const sla = resolutionTimeMs > this.slaThresholdMs ? 'Breached' : 'Met';
-
-      return {
-        cycleTime: {
-          resolutionTimeMs,
-          resolutionTimeFormatted: this.formatDuration(resolutionTimeMs, false),
-          isInProgress: false,
-          startedAt: firstTransitionDate,
-          completedAt: lastTransitionDate,
-        },
-        sla,
-      };
-    } else {
-      const currentDate = new Date();
-      const resolutionTimeMs = currentDate.getTime() - firstTransitionDate.getTime();
-      if (ticketId === 'c0b4c58f-d4cb-4ef4-9ac7-cd11a8b58013')
-        console.log(currentDate, firstTransitionDate);
-      return {
-        cycleTime: {
-          resolutionTimeMs,
-          resolutionTimeFormatted: this.formatDuration(resolutionTimeMs, true),
-          isInProgress: true,
-          startedAt: firstTransitionDate,
-          completedAt: null,
-        },
-        sla: 'In Progress',
-      };
-    }
+    return {
+      cycleTime: {
+        resolutionTimeMs: history.resolutionTimeMs,
+        resolutionTimeFormatted: this.formatDuration(history.resolutionTimeMs, false),
+        isInProgress,
+        startedAt: history.firstTransitionDate,
+        completedAt: history.lastTransitionDate,
+      },
+      sla,
+    };
   }
 
   // Helper method for formatting durations (candidates will implement this)

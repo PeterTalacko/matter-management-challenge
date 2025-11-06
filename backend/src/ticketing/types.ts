@@ -2,11 +2,11 @@ export interface Matter {
   id: string;
   boardId: string;
   fields: Record<string, FieldValue>;
-  // TODO: Move type
   history: {
-    status: StatusValue;
-    transitionedAt: Date;
-  }[];
+    firstTransitionDate: Date;
+    lastTransitionDate: Date | null;
+    resolutionTimeMs: number;
+  };
   cycleTime?: CycleTime;
   sla?: SLAStatus;
   createdAt: string;

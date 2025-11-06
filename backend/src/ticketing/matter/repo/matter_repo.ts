@@ -35,7 +35,7 @@ export class MatterRepo {
    */
 
   async getMatters(params: MatterListParams) {
-    const { page = 1, limit = 25, sortBy = 'created_at', sortOrder = 'desc' } = params;
+    const { page = 1, limit = 25, sortBy = 'created_at', sortOrder = 'desc', search = '' } = params;
     const offset = (page - 1) * limit;
 
     const client = await pool.connect();
@@ -43,24 +43,61 @@ export class MatterRepo {
     try {
       // TODO: Implement search condition
       // Currently search is not implemented - add ILIKE queries with pg_trgm
-      const searchCondition = '';
+      const searchCondition =
+        search.length === 0
+          ? '1=1'
+          : `  mt.subject % '${search}'
+            OR mt.description % '${search}'
+            OR (u.first_name || ' ' || u.last_name)  % '${search}'
+            OR tfso.label ILIKE '%${search}%'
+            OR tfo.label ILIKE '%${search}%'
+            OR mt.sla ILIKE '%${search}%'
+            OR (mt.case_number::text) ILIKE '%${search}%'
+            OR ((mt.contract_value_amount::text) || mt.contract_value_currency) % '${search}'
+            `;
+
       const queryParams: (string | number)[] = [];
       const paramIndex = 1;
 
       // Determine sort column
-      let orderByClause = 'tt.created_at DESC';
+      let orderByClause = 'mt.created_at DESC';
       if (sortBy === 'created_at') {
-        orderByClause = `tt.created_at ${sortOrder.toUpperCase()}`;
+        orderByClause = `mt.created_at ${sortOrder.toUpperCase()}`;
       } else if (sortBy === 'updated_at') {
-        orderByClause = `tt.updated_at ${sortOrder.toUpperCase()}`;
+        orderByClause = `mt.updated_at ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'subject') {
+        orderByClause = `mt.subject ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'case_number') {
+        orderByClause = `mt.case_number ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'status') {
+        orderByClause = `tfso.sequence ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'assigned_to') {
+        orderByClause = `(u.first_name || ' ' || u.last_name) ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'priority') {
+        orderByClause = `tfo.sequence ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'contract_value') {
+        // This just orders by the value number regardless of currency type
+        // Possible solutions could be to add a normalised contract value to sort by that can be recalculated on refresh
+        // ticketing_currency_field_options has a sequence column which could also be used for sorting
+        orderByClause = `mt.contract_value_amount ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'due_date') {
+        orderByClause = `mt.due_date ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'urgent') {
+        orderByClause = `mt.urgent ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'resolution_time') {
+        orderByClause = `resolution_time_ms ${sortOrder.toUpperCase()}`;
+      } else if (sortBy === 'sla') {
+        orderByClause = `mt.sla ${sortOrder.toUpperCase()}`;
       }
 
       // Get total count
       const countQuery = `
-        SELECT COUNT(DISTINCT tt.id) as total
-        FROM ticketing_ticket tt
-        LEFT JOIN ticketing_ticket_field_value ttfv ON tt.id = ttfv.ticket_id
-        WHERE 1=1 ${searchCondition}
+        SELECT COUNT(DISTINCT mt.id) as total
+        FROM mv_tickets mt
+        LEFT JOIN users u ON u.id = mt.assigned_to
+        LEFT JOIN ticketing_field_status_options tfso ON tfso.id = mt.status_id
+        LEFT JOIN ticketing_field_options tfo ON tfo.id = mt.priority
+        WHERE ${searchCondition}
       `;
 
       const countResult = await client.query(countQuery, queryParams);
@@ -68,10 +105,25 @@ export class MatterRepo {
 
       // Get matters
       const mattersQuery = `
-        SELECT DISTINCT tt.id, tt.board_id, tt.created_at, tt.updated_at
-        FROM ticketing_ticket tt
-        LEFT JOIN ticketing_ticket_field_value ttfv ON tt.id = ttfv.ticket_id
-        WHERE 1=1 ${searchCondition}
+        WITH now_timestamp AS (SELECT now() AS ts)
+        SELECT
+          mt.id,
+          mt.board_id,
+          mt.created_at,
+          mt.updated_at,
+          mt.first_transitioned_at,
+          mt.last_transitioned_at,
+          EXTRACT(
+            EPOCH FROM (
+              COALESCE(mt.resolution_time, nt.ts - mt.first_transitioned_at)
+            )
+          ) * 1000 AS resolution_time_ms
+        FROM mv_tickets mt
+        LEFT JOIN users u ON u.id = mt.assigned_to
+        LEFT JOIN ticketing_field_status_options tfso ON tfso.id = mt.status_id
+        LEFT JOIN ticketing_field_options tfo ON tfo.id = mt.priority
+        CROSS JOIN now_timestamp nt
+        WHERE ${searchCondition}
         ORDER BY ${orderByClause}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
@@ -84,13 +136,16 @@ export class MatterRepo {
 
       for (const matterRow of mattersResult.rows) {
         const fields = await this.getMatterFields(client, matterRow.id);
-        const history = await this.getMatterCycleHistory(client, matterRow.id);
 
         matters.push({
           id: matterRow.id,
           boardId: matterRow.board_id,
           fields,
-          history,
+          history: {
+            firstTransitionDate: matterRow.first_transitioned_at,
+            lastTransitionDate: matterRow.last_transitioned_at,
+            resolutionTimeMs: matterRow.resolution_time_ms,
+          },
           createdAt: matterRow.created_at,
           updatedAt: matterRow.updated_at,
         });
@@ -110,8 +165,19 @@ export class MatterRepo {
 
     try {
       const matterResult = await client.query(
-        `SELECT id, board_id, created_at, updated_at
-         FROM ticketing_ticket
+        `SELECT
+          mt.id,
+          mt.board_id,
+          mt.created_at,
+          mt.updated_at,
+          mt.first_transitioned_at,
+          mt.last_transitioned_at,
+          EXTRACT(
+            EPOCH FROM (
+              COALESCE(mt.resolution_time, nt.ts - mt.first_transitioned_at)
+            )
+          ) * 1000 AS resolution_time_ms
+         FROM mv_tickets mt
          WHERE id = $1`,
         [matterId],
       );
@@ -122,13 +188,17 @@ export class MatterRepo {
 
       const matterRow = matterResult.rows[0];
       const fields = await this.getMatterFields(client, matterId);
-      const history = await this.getMatterCycleHistory(client, matterId);
+      // const history = await this.getMatterCycleHistory(client, matterId);
 
       return {
         id: matterRow.id,
         boardId: matterRow.board_id,
         fields,
-        history,
+        history: {
+          firstTransitionDate: matterRow.first_transitioned_at,
+          lastTransitionDate: matterRow.last_transitioned_at,
+          resolutionTimeMs: matterRow.resolution_time_ms,
+        },
         createdAt: matterRow.created_at,
         updatedAt: matterRow.updated_at,
       };
@@ -139,6 +209,8 @@ export class MatterRepo {
 
   /**
    * Get all field values for a matter
+   * Could be made redundant by using mv_tickets to join and fetch all the data
+   * required data in getMatters
    */
   private async getMatterFields(
     client: PoolClient,
@@ -349,35 +421,6 @@ export class MatterRepo {
     } finally {
       client.release();
     }
-  }
-
-  /**
-   * Get all cycle history for a matter
-   */
-  private async getMatterCycleHistory(
-    client: PoolClient,
-    ticketId: string,
-  ): Promise<Matter['history']> {
-    const matterHistory = await client.query<{ id: string; label: string; transitioned_at: Date }>(
-      `SELECT
-        tfso.id,
-        tfso.label,
-        tcth.transitioned_at
-      FROM ticketing_cycle_time_histories tcth
-      LEFT JOIN ticketing_field_status_options tfso on tcth.to_status_id = tfso.id 
-      WHERE tcth.ticket_id = $1
-      ORDER BY transitioned_at ASC`,
-      [ticketId],
-    );
-    // console.log(matterHistory.rowCount);
-
-    return matterHistory.rows.map((row) => ({
-      status: {
-        statusId: row.id,
-        groupName: row.label,
-      },
-      transitionedAt: row.transitioned_at,
-    }));
   }
 }
 

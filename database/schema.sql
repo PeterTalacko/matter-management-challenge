@@ -147,6 +147,17 @@ CREATE TABLE ticketing_cycle_time_histories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
+-- Could be used for sorting sla options
+CREATE TABLE ticketing_sla_options (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id),
+    label TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Indexes for performance
 CREATE INDEX idx_ticketing_ticket_board_id ON ticketing_ticket(board_id);
 CREATE INDEX idx_ticket_field_value_ticket_id ON ticketing_ticket_field_value(ticket_id);
@@ -157,33 +168,76 @@ CREATE INDEX idx_cycle_time_histories_status_field ON ticketing_cycle_time_histo
 CREATE INDEX idx_cycle_time_histories_to_status ON ticketing_cycle_time_histories(to_status_id);
 
 -- Indexes for text search
-CREATE INDEX idx_ticket_field_value_text_trgm ON ticketing_ticket_field_value USING gin (text_value gin_trgm_ops);
-CREATE INDEX idx_ticket_field_value_string_trgm ON ticketing_ticket_field_value USING gin (string_value gin_trgm_ops);
+-- CREATE INDEX idx_ticket_field_value_text_trgm ON ticketing_ticket_field_value USING gin (text_value gin_trgm_ops);
+-- CREATE INDEX idx_ticket_field_value_string_trgm ON ticketing_ticket_field_value USING gin (string_value gin_trgm_ops);
+
+-- -- Indexes for sorting and filtering
+-- CREATE INDEX idx_ticket_field_value_number ON ticketing_ticket_field_value(number_value);
+-- CREATE INDEX idx_ticket_field_value_date ON ticketing_ticket_field_value(date_value);
+-- CREATE INDEX idx_ticketing_ticket_created_at ON ticketing_ticket(created_at);
+
+CREATE MATERIALIZED VIEW mv_tickets AS
+WITH cycle_times AS (
+    SELECT
+        tcth.ticket_id,
+        MIN(tcth.transitioned_at) AS first_transitioned_at,
+        -- Only set last_transitioned_at if ticket is completed
+        CASE
+            WHEN BOOL_OR(tfso.label = 'Done') THEN MAX(tcth.transitioned_at)
+            ELSE NULL
+        END AS last_transitioned_at
+    FROM ticketing_cycle_time_histories tcth
+    LEFT JOIN ticketing_field_status_options tfso ON tcth.to_status_id = tfso.id
+    GROUP BY tcth.ticket_id
+)
+SELECT
+    tt.id,
+    tt.board_id,
+    tt.created_at,
+    tt.updated_at,
+    MAX(CASE WHEN tf.name = 'subject' THEN ttfv.text_value END) AS subject,
+    MAX(CASE WHEN tf.name = 'Description' THEN ttfv.text_value END) AS description,
+    MAX(CASE WHEN tf.name = 'Case Number' THEN ttfv.number_value END) AS case_number,
+    MAX(CASE WHEN tf.name = 'Assigned To' THEN ttfv.user_value END) AS assigned_to,
+    MAX(CASE WHEN tf.name = 'Contract Value' THEN ttfv.currency_value ->> 'amount' END)::numeric AS contract_value_amount,
+    MAX(CASE WHEN tf.name = 'Contract Value' THEN ttfv.currency_value ->> 'currency' END) AS contract_value_currency,
+    bool_or(CASE WHEN tf.name = 'Urgent' THEN ttfv.boolean_value END) AS urgent,
+    MAX(CASE WHEN tf.name = 'Due Date' THEN ttfv.date_value END) AS due_date,
+    MAX(CASE WHEN tf.name = 'Priority' THEN ttfv.select_reference_value_uuid::text END)::uuid AS priority,
+    MAX(CASE WHEN tf.name = 'Status' THEN ttfv.status_reference_value_uuid::text END)::uuid AS status_id,
+    ct.first_transitioned_at,
+    ct.last_transitioned_at,
+    CASE
+        WHEN ct.last_transitioned_at IS NOT NULL THEN ct.last_transitioned_at - ct.first_transitioned_at
+        ELSE NULL
+    END AS resolution_time,
+    CASE
+        WHEN ct.last_transitioned_at IS NOT NULL THEN
+        CASE
+            WHEN ct.last_transitioned_at - ct.first_transitioned_at <= INTERVAL '8 hours' THEN 'Met'
+            ELSE 'Breached'
+        END
+    ELSE 'In Progress'
+    END AS sla
+FROM ticketing_ticket tt
+LEFT JOIN ticketing_ticket_field_value ttfv ON ttfv.ticket_id = tt.id
+LEFT JOIN ticketing_fields tf ON tf.id = ttfv.ticket_field_id
+LEFT JOIN cycle_times ct ON ct.ticket_id = tt.id
+GROUP BY
+    tt.id,
+    ct.first_transitioned_at,
+    ct.last_transitioned_at;
+
+-- Used for refreshing concurrently
+CREATE UNIQUE INDEX mv_tickets_id_idx ON mv_tickets (id);
+
+-- Indexes for text search
+-- TODO: Due to the MV change, these indices should be replaced with indices on the MV
+CREATE INDEX idx_mv_ticket_field_subject_trgm ON mv_tickets USING gin (subject gin_trgm_ops);
+CREATE INDEX idx_mv_ticket_field_description_trgm ON mv_tickets USING gin (description gin_trgm_ops);
+CREATE INDEX idx_users_full_name_trgm ON users USING gin ((first_name || ' ' || last_name) gin_trgm_ops);
 
 -- Indexes for sorting and filtering
-CREATE INDEX idx_ticket_field_value_number ON ticketing_ticket_field_value(number_value);
-CREATE INDEX idx_ticket_field_value_date ON ticketing_ticket_field_value(date_value);
-CREATE INDEX idx_ticketing_ticket_created_at ON ticketing_ticket(created_at);
-
--- Potential choice for more efficient fetches
--- Downside is if the system is expected to receive writes often
-CREATE MATERIALIZED VIEW mv_tickets AS
-SELECT
-  tt.id,
-  tt.board_id,
-  tt.created_at,
-  tt.updated_at,
-  MAX(CASE WHEN f.name = 'subject' THEN fv.text_value END) AS subject,
-  MAX(CASE WHEN f.name = 'Description' THEN fv.text_value END) AS description,
-  MAX(CASE WHEN f.name = 'Case Number' THEN fv.number_value END) AS case_number,
-  MAX(CASE WHEN f.name = 'Assigned To' THEN fv.user_value END) AS assigned_to,
-  MAX(CASE WHEN f.name = 'Contract Value' THEN fv.currency_value ->> 'amount' END) AS contract_value_amount,
-  MAX(CASE WHEN f.name = 'Contract Value' THEN fv.currency_value ->> 'currency' END) AS contract_value_currency,
-  bool_or(CASE WHEN f.name = 'Urgent' THEN fv.boolean_value END) AS urgent,
-  MAX(CASE WHEN f.name = 'Due Date' THEN fv.date_value END) AS due_date,
-  MAX(CASE WHEN f.name = 'Priority' THEN fv.select_reference_value_uuid::text END)::uuid AS priority,
-  MAX(CASE WHEN f.name = 'Status' THEN fv.status_reference_value_uuid::text END)::uuid AS status
-FROM ticketing_ticket tt
-LEFT JOIN ticketing_ticket_field_value fv ON fv.ticket_id = tt.id
-LEFT JOIN ticketing_fields f ON f.id = fv.ticket_field_id
-GROUP BY tt.id;
+-- CREATE INDEX idx_ticket_field_value_number ON ticketing_ticket_field_value(number_value);
+-- CREATE INDEX idx_ticket_field_value_date ON ticketing_ticket_field_value(date_value);
+-- CREATE INDEX idx_ticketing_ticket_created_at ON ticketing_ticket(created_at);

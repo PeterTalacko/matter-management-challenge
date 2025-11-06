@@ -88,7 +88,20 @@ async function seed() {
         [accountId, currencies[i].code, currencies[i].name, currencies[i].symbol, i + 1]
       );
     }
+
+    // Create sla options
+    // Used for sorting sla with sequence
+    console.log('Creating sla options...');
+    const slas = ['In Progress', 'Met', 'Breached'];
     
+    for (let i = 0; i < slas.length; i++) {
+      await client.query(
+        `INSERT INTO ticketing_sla_options (account_id, label, sequence)
+         VALUES ($1, $2, $3)`,
+        [accountId, slas[i], i + 1]
+      );
+    }
+
     // Create fields
     console.log('Creating fields...');
     const fields = {};
@@ -358,6 +371,9 @@ async function seed() {
         );
       }
     }
+
+    // Refresh mv_tickets
+    await client.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_tickets;');
     
     console.log('Seed completed successfully!');
     console.log(`Created:
